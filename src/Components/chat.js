@@ -3,37 +3,48 @@ import { auth, firestore, timestamp } from '../firebase';
 import { collection, addDoc, query, orderBy, onSnapshot } from 'firebase/firestore';
 import './chat.css';
 import FirebaseAuth from './Auth/firebaseAuth';
-
 const Chat = () => {
   const [user, setUser] = useState(null);
   const [message, setMessage] = useState('');
   const [messages, setMessages] = useState([]);
   const messagesEndRef = useRef(null);
-
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  };
   useEffect(() => {
     const unsubscribeAuth = auth.onAuthStateChanged((user) => {
-      setUser(user);
-    });
+      if (user) {
+        setUser(user);
 
-    const q = query(collection(firestore, 'messages'), orderBy('createdAt'));
-    const unsubscribeMessages = onSnapshot(q, (snapshot) => {
-      const messages = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      }));
-      setMessages(messages);
-      scrollToBottom();
-    });
+        // Fetch messages only after user is authenticated
+        const q = query(collection(firestore, 'messages'), orderBy('createdAt'));
+        const unsubscribeMessages = onSnapshot(q, (snapshot) => {
+          const fetchedMessages = snapshot.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data()
+          }));
+          setMessages(fetchedMessages);
+          scrollToBottom(); // Scroll to bottom on initial load
+        });
 
-    const scrollToBottom = () => {
-      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-    };
+        return () => {
+          unsubscribeMessages();
+        };
+      } else {
+        setUser(null);
+        setMessages([]); // Clear messages when user logs out
+      }
+    });
 
     return () => {
       unsubscribeAuth();
-      unsubscribeMessages();
     };
   }, []);
+  useEffect(() => {
+  console.log("useEffect - messages updated:", messages);
+  scrollToBottom(); // Ensure this is called whenever messages update
+}, [messages]);
+
 
   const sendMessage = async () => {
     if (message.trim() !== '' && user) {
@@ -44,6 +55,7 @@ const Chat = () => {
         displayName: user.displayName
       });
       setMessage('');
+      scrollToBottom();
     }
   };
 
@@ -57,7 +69,6 @@ const Chat = () => {
   return (
     <div className="chat-container">
       <div className="chat-header">
-        {/* <img src={companyLogo} alt="Company Logo" style={{width:"250px"}} /> */}
       </div>
       <FirebaseAuth />
       {user && (
